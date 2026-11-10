@@ -27,7 +27,7 @@ import (
 
 const (
 	defaultAPIURL      = "https://apinebula.com"
-	defaultModel       = "gpt-image-2.5"
+	defaultModel       = "gpt-image-2.6"
 	defaultGrokModel   = "grok-imagine-image-2.0"
 	defaultVideoModel  = "grok-imagine-video"
 	defaultSize        = "1K"
@@ -953,7 +953,7 @@ func printJSON(value any) {
 
 func parseCommon(fs *flag.FlagSet, argv []string, args *commonArgs) error {
 	var timeout float64
-	fs.StringVar(&args.model, "model", currentDefaultModel(), "image model (default gpt-image-2.5; say Image 2.6 or any gateway id)")
+	fs.StringVar(&args.model, "model", currentDefaultModel(), "image model (default gpt-image-2.6; say Image 2.5 or any gateway id)")
 	fs.StringVar(&args.size, "size", defaultSize, "1K, 2K, 4K, auto, or WIDTHxHEIGHT")
 	fs.StringVar(&args.quality, "quality", defaultQuality, "low, medium, high, or auto")
 	fs.IntVar(&args.n, "n", 1, "number of variants (1-10)")
@@ -1470,7 +1470,7 @@ func runModels(argv []string) error {
 			"video": currentDefaultVideoModel(),
 			"size":  defaultSize,
 		},
-		"note": "Ask which models are available, then name one. Image 2 / 2.5 / 2.6 / G2.6 map to gpt-image-{version}. Unspecified image uses gpt-image-2.5. Unspecified video uses grok-imagine-video. Unspecified size uses 1K. New gateway models do not require a skill update.",
+		"note": "This skill is Codex Image 2.6. Unspecified image uses gpt-image-2.6. Say 2.5 for the cheaper model, or name 2.7 and later. Unspecified video uses grok-imagine-video. Unspecified size uses 1K.",
 	}
 	key, err := apiKey()
 	if err != nil {
@@ -1529,8 +1529,8 @@ func runModels(argv []string) error {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Codex Image")
-	fmt.Fprintln(os.Stderr, "Usage: codex-image2-5 <generate|generate-batch|edit|video|models> [options]")
-	fmt.Fprintln(os.Stderr, "Image default: --model gpt-image-2.5  --size 1K  --quality auto")
+	fmt.Fprintln(os.Stderr, "Usage: codex-image2-6 <generate|generate-batch|edit|video|models> [options]")
+	fmt.Fprintln(os.Stderr, "Image default: --model gpt-image-2.6  --size 1K  --quality auto")
 	fmt.Fprintln(os.Stderr, "Video default: --model grok-imagine-video  --size 1K  --seconds 8")
 	fmt.Fprintln(os.Stderr, "Named versions: Image 2, 2.5, 2.6, G2.6, 2.7... → gpt-image-{version}")
 	fmt.Fprintln(os.Stderr, "GPT variants: 闪焰/flare  日耀/sunburst  latest/最新")
