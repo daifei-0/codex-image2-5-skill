@@ -1,4 +1,4 @@
 interface:
   display_name: "Codex Image 2.5"
-  short_description: "Generate and edit images; switch models and 1K/2K/4K"
-  default_prompt: "Use $codex-image2-5 to generate or edit an image, following my model and 1K/2K/4K choices in this conversation."
+  short_description: "Images and video; default 2.5 / 1K, name 2.6 or video"
+  default_prompt: "Use $codex-image2-5. If I ask which models are supported, list them. Follow my model and 1K/2K/4K choices. Image default is 2.5; video default is grok-imagine-video."

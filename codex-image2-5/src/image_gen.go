@@ -26,12 +26,15 @@ import (
 )
 
 const (
-	defaultAPIURL    = "https://apinebula.com"
-	defaultModel     = "gpt-image-2.5"
-	defaultGrokModel = "grok-imagine-image-2.0"
-	defaultSize      = "1K"
-	defaultQuality   = "auto"
-	defaultOutDir    = "output/imagegen"
+	defaultAPIURL      = "https://apinebula.com"
+	defaultModel       = "gpt-image-2.5"
+	defaultGrokModel   = "grok-imagine-image-2.0"
+	defaultVideoModel  = "grok-imagine-video"
+	defaultSize        = "1K"
+	defaultQuality     = "auto"
+	defaultOutDir      = "output/imagegen"
+	defaultVideoOutDir = "output/videogen"
+	defaultVideoSecs   = 8
 )
 
 // sizePresets 把用户说的 1K/2K/4K 换成 Images API 真正认的像素。
@@ -44,49 +47,11 @@ var sizePresets = map[string]string{
 
 var retryable = map[int]bool{429: true, 500: true, 502: true, 503: true, 504: true, 524: true}
 
-// 对话别名 → 网关模型 id。更具体的写在前面。不含 Video。
+// Grok 别名仍用表。GPT Image 版本号（2.5、2.6、2.7…）由 resolveGPTImage 按规则生成，不必每次改表。
 var modelAliases = []struct {
 	alias string
 	id    string
 }{
-	{"gpt-image-2.5-flare", "gpt-image-2.5-flare"},
-	{"gpt image 2.5 flare", "gpt-image-2.5-flare"},
-	{"2.5 flare", "gpt-image-2.5-flare"},
-	{"image 2.5 flare", "gpt-image-2.5-flare"},
-	{"image 2.5 闪焰", "gpt-image-2.5-flare"},
-	{"flare", "gpt-image-2.5-flare"},
-	{"闪焰", "gpt-image-2.5-flare"},
-	{"闪焰版", "gpt-image-2.5-flare"},
-	{"gpt-image-2.5-sunburst", "gpt-image-2.5-sunburst"},
-	{"gpt image 2.5 sunburst", "gpt-image-2.5-sunburst"},
-	{"2.5 sunburst", "gpt-image-2.5-sunburst"},
-	{"image 2.5 sunburst", "gpt-image-2.5-sunburst"},
-	{"image 2.5 日耀", "gpt-image-2.5-sunburst"},
-	{"sunburst", "gpt-image-2.5-sunburst"},
-	{"日耀", "gpt-image-2.5-sunburst"},
-	{"日耀版", "gpt-image-2.5-sunburst"},
-	{"gpt-image-2.5", "gpt-image-2.5"},
-	{"gpt image 2.5", "gpt-image-2.5"},
-	{"gptimage 2.5", "gpt-image-2.5"},
-	{"image 2.5", "gpt-image-2.5"},
-	{"image2.5", "gpt-image-2.5"},
-	{"img 2.5", "gpt-image-2.5"},
-	{"image 二点五", "gpt-image-2.5"},
-	{"二点五", "gpt-image-2.5"},
-	{"2.5", "gpt-image-2.5"},
-	{"gpt-image-2", "gpt-image-2"},
-	{"gpt image 2", "gpt-image-2"},
-	{"gptimage 2", "gpt-image-2"},
-	{"gptimage2", "gpt-image-2"},
-	{"image 2", "gpt-image-2"},
-	{"image2", "gpt-image-2"},
-	{"image 2.0", "gpt-image-2"},
-	{"gpt image 2.0", "gpt-image-2"},
-	{"img 2", "gpt-image-2"},
-	{"image 二", "gpt-image-2"},
-	{"2", "gpt-image-2"},
-	{"gpt", defaultModel},
-	{"gpt image", defaultModel},
 	{"grok-imagine-image-quality", "grok-imagine-image-quality"},
 	{"grok imagine image quality", "grok-imagine-image-quality"},
 	{"grok imagine quality", "grok-imagine-image-quality"},
@@ -105,6 +70,13 @@ var modelAliases = []struct {
 	{"grok-imagine", "grok-imagine"},
 	{"grok imagine", "grok-imagine"},
 	{"grok", defaultGrokModel},
+	{"chatgpt-image-latest", "chatgpt-image-latest"},
+	{"chatgpt image latest", "chatgpt-image-latest"},
+	{"chatgpt latest", "chatgpt-image-latest"},
+	{"image latest", "chatgpt-image-latest"},
+	{"latest", "chatgpt-image-latest"},
+	{"最新", "chatgpt-image-latest"},
+	{"最新模型", "chatgpt-image-latest"},
 }
 
 type commonArgs struct {
@@ -136,14 +108,7 @@ type batchJob struct {
 }
 
 func endpoint(base, operation string) string {
-	base = strings.TrimRight(strings.TrimSpace(base), "/")
-	if base == "" {
-		base = defaultAPIURL
-	}
-	if !strings.HasSuffix(base, "/v1") {
-		base += "/v1"
-	}
-	return base + "/images/" + operation
+	return apiRoot(base) + "/images/" + operation
 }
 
 // resolveSize 接受 1K/2K/4K、auto，或 WIDTHxHEIGHT。发给上游的永远是后两种。
@@ -209,16 +174,161 @@ func isGrokImage(model string) bool {
 	return strings.HasPrefix(k, "grok-imagine") && !isVideoModel(k)
 }
 
-// resolveModel 把对话里的叫法收成网关模型名。Video 直接拒绝；认不出的原样传。
+func currentDefaultModel() string {
+	if value := strings.TrimSpace(os.Getenv("CODEX_IMAGE_DEFAULT_MODEL")); value != "" {
+		return value
+	}
+	return defaultModel
+}
+
+func currentDefaultVideoModel() string {
+	if value := strings.TrimSpace(os.Getenv("CODEX_VIDEO_DEFAULT_MODEL")); value != "" {
+		return value
+	}
+	return defaultVideoModel
+}
+
+func defaultGPTBase() string {
+	id := strings.ToLower(strings.TrimSpace(currentDefaultModel()))
+	id = strings.TrimSuffix(id, "-flare")
+	id = strings.TrimSuffix(id, "-sunburst")
+	if strings.HasPrefix(id, "gpt-image-") {
+		return id
+	}
+	return defaultModel
+}
+
+func rewriteSpokenDigits(value string) string {
+	var built strings.Builder
+	for _, character := range value {
+		switch character {
+		case '零', '〇', '○':
+			built.WriteByte('0')
+		case '一', '壹':
+			built.WriteByte('1')
+		case '二', '两', '兩', '贰':
+			built.WriteByte('2')
+		case '三', '叁':
+			built.WriteByte('3')
+		case '四', '肆':
+			built.WriteByte('4')
+		case '五', '伍':
+			built.WriteByte('5')
+		case '六', '陆', '陸':
+			built.WriteByte('6')
+		case '七', '柒':
+			built.WriteByte('7')
+		case '八', '捌':
+			built.WriteByte('8')
+		case '九', '玖':
+			built.WriteByte('9')
+		case '点', '點', '．':
+			built.WriteByte('.')
+		default:
+			built.WriteRune(character)
+		}
+	}
+	return built.String()
+}
+
+func splitGPTVariant(key string) (rest, variant string) {
+	type suffix struct {
+		token string
+		id    string
+	}
+	for _, item := range []suffix{
+		{normalizeKey("闪焰版"), "-flare"},
+		{normalizeKey("日耀版"), "-sunburst"},
+		{normalizeKey("flare"), "-flare"},
+		{normalizeKey("sunburst"), "-sunburst"},
+		{normalizeKey("闪焰"), "-flare"},
+		{normalizeKey("日耀"), "-sunburst"},
+	} {
+		if item.token != "" && strings.HasSuffix(key, item.token) {
+			return strings.TrimSuffix(key, item.token), item.id
+		}
+	}
+	return key, ""
+}
+
+func stripGPTPrefix(key string) string {
+	for _, prefix := range []string{"以麦", "gptimage", "gpt", "image", "img"} {
+		if strings.HasPrefix(key, prefix) {
+			key = strings.TrimPrefix(key, prefix)
+			break
+		}
+	}
+	if strings.HasPrefix(key, "g") && looksLikeVersion(key[1:]) {
+		return key[1:]
+	}
+	return key
+}
+
+func gptImageID(version, variant string) string {
+	if version == "" {
+		return defaultGPTBase() + variant
+	}
+	major, minor, ok := strings.Cut(version, ".")
+	if !ok || minor == "0" {
+		return "gpt-image-" + major + variant
+	}
+	return "gpt-image-" + version + variant
+}
+
+func looksLikeVersion(value string) bool {
+	if value == "" {
+		return false
+	}
+	major, minor, ok := strings.Cut(value, ".")
+	if !ok {
+		_, err := strconv.Atoi(value)
+		return err == nil
+	}
+	if major == "" || minor == "" {
+		return false
+	}
+	_, e1 := strconv.Atoi(major)
+	_, e2 := strconv.Atoi(minor)
+	return e1 == nil && e2 == nil
+}
+
+func resolveGPTImage(model string) (string, bool) {
+	key := normalizeKey(rewriteSpokenDigits(model))
+	rest, variant := splitGPTVariant(key)
+	rest = stripGPTPrefix(rest)
+	if rest == "" {
+		if variant != "" || key == "gpt" || key == "gptimage" {
+			return gptImageID("", variant), true
+		}
+		return "", false
+	}
+	if !looksLikeVersion(rest) {
+		return "", false
+	}
+	return gptImageID(rest, variant), true
+}
+
+func apiRoot(base string) string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	if base == "" {
+		base = defaultAPIURL
+	}
+	if !strings.HasSuffix(base, "/v1") {
+		base += "/v1"
+	}
+	return base
+}
+
+// resolveModel 把对话里的叫法收成网关生图模型名。视频模型请用 video 命令；认不出的原样传。
 func resolveModel(model string) (string, error) {
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return defaultModel, nil
+		return currentDefaultModel(), nil
 	}
 	if isVideoModel(model) {
-		return "", errors.New("video models are not supported; use a GPT or Grok image model")
+		return "", errors.New("this is a video model; use the video command")
 	}
-	key := normalizeKey(model)
+	key := normalizeKey(rewriteSpokenDigits(model))
 	if key == "高质量" || key == "高清" || key == "highquality" {
 		return "", errors.New("quality alone does not select a model; keep the current model and use --quality high, or explicitly choose Grok 高质量")
 	}
@@ -227,7 +337,81 @@ func resolveModel(model string) (string, error) {
 			return item.id, nil
 		}
 	}
+	if id, ok := resolveGPTImage(model); ok {
+		return id, nil
+	}
 	return model, nil
+}
+
+func resolveVideoModel(model string) (string, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return currentDefaultVideoModel(), nil
+	}
+	key := normalizeKey(rewriteSpokenDigits(model))
+	if key == "高质量" || key == "高清" || key == "highquality" {
+		return "", errors.New("quality alone does not select a video model")
+	}
+	for _, item := range []struct {
+		alias string
+		id    string
+	}{
+		{"grok-imagine-video-1.5-preview", "grok-imagine-video-1.5-preview"},
+		{"grok-imagine-video-1.5", "grok-imagine-video-1.5"},
+		{"grok imagine video 1.5", "grok-imagine-video-1.5"},
+		{"grok video 1.5", "grok-imagine-video-1.5"},
+		{"grok 视频 1.5", "grok-imagine-video-1.5"},
+		{"grok-imagine-video", "grok-imagine-video"},
+		{"grok imagine video", "grok-imagine-video"},
+		{"grok video", "grok-imagine-video"},
+		{"grok 视频", "grok-imagine-video"},
+		{"sora-2", "sora-2"},
+		{"sora2", "sora-2"},
+		{"sora 2", "sora-2"},
+		{"sora", "sora-2"},
+		{"video", currentDefaultVideoModel()},
+		{"视频", currentDefaultVideoModel()},
+		{"生成视频", currentDefaultVideoModel()},
+	} {
+		if key == normalizeKey(item.alias) {
+			return item.id, nil
+		}
+	}
+	if isVideoModel(model) {
+		return model, nil
+	}
+	if id, ok := resolveGPTImage(model); ok {
+		return "", fmt.Errorf("%s is an image model; use generate, not video", id)
+	}
+	return model, nil
+}
+
+func resolveVideoSize(size string) (pixels, band, note string, err error) {
+	size = normalizeSize(size)
+	if size == "" {
+		size = defaultSize
+	}
+	switch strings.ToUpper(size) {
+	case "1K", "AUTO", "720P", "720":
+		return "1280x720", "1K", "", nil
+	case "2K", "1080P", "1080":
+		return "1920x1080", "2K", "", nil
+	case "4K", "2160P", "2160":
+		return "1920x1080", "4K", "most video models top out at 1080p; requested the highest common slot", nil
+	case "480P", "480":
+		return "848x480", "480p", "", nil
+	}
+	if strings.Contains(strings.ToLower(size), "x") {
+		parts := strings.Split(strings.ToLower(size), "x")
+		if len(parts) == 2 {
+			w, e1 := strconv.Atoi(parts[0])
+			h, e2 := strconv.Atoi(parts[1])
+			if e1 == nil && e2 == nil && w > 0 && h > 0 {
+				return fmt.Sprintf("%dx%d", w, h), requestedBand(size), "", nil
+			}
+		}
+	}
+	return "", "", "", errors.New("video size must be 1K, 2K, 4K, 480p/720p/1080p, or WIDTHxHEIGHT")
 }
 
 func grokResolution(size string) (res, pixel, note string) {
@@ -769,7 +953,7 @@ func printJSON(value any) {
 
 func parseCommon(fs *flag.FlagSet, argv []string, args *commonArgs) error {
 	var timeout float64
-	fs.StringVar(&args.model, "model", defaultModel, "image model (default gpt-image-2.5; Image 2, Image 2.5, GPT or Grok image ids, not video)")
+	fs.StringVar(&args.model, "model", currentDefaultModel(), "image model (default gpt-image-2.5; say Image 2.6 or any gateway id)")
 	fs.StringVar(&args.size, "size", defaultSize, "1K, 2K, 4K, auto, or WIDTHxHEIGHT")
 	fs.StringVar(&args.quality, "quality", defaultQuality, "low, medium, high, or auto")
 	fs.IntVar(&args.n, "n", 1, "number of variants (1-10)")
@@ -946,15 +1130,415 @@ func runBatch(argv []string) error {
 	return nil
 }
 
+func isProbablyImageModel(id string) bool {
+	key := strings.ToLower(id)
+	if isProbablyVideoModel(id) {
+		return false
+	}
+	return strings.Contains(key, "image") || strings.Contains(key, "dall") || strings.Contains(key, "flux") || strings.Contains(key, "imagen") || strings.Contains(key, "grok-imagine")
+}
+
+func isProbablyVideoModel(id string) bool {
+	key := strings.ToLower(id)
+	return strings.Contains(key, "video") || strings.Contains(key, "sora") || strings.Contains(key, "kling") || strings.Contains(key, "runway") || strings.Contains(key, "luma") || strings.Contains(key, "jimeng") || strings.Contains(key, "即梦")
+}
+
+func jsonString(value map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if text, ok := value[key].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
+func asObject(value any) map[string]any {
+	object, _ := value.(map[string]any)
+	return object
+}
+
+func videoTaskID(payload map[string]any) string {
+	if id := jsonString(payload, "id", "task_id", "request_id"); id != "" {
+		return id
+	}
+	if nested := asObject(payload["data"]); nested != nil {
+		return jsonString(nested, "id", "task_id", "request_id")
+	}
+	return ""
+}
+
+func videoStatus(payload map[string]any) string {
+	status := jsonString(payload, "status", "task_status")
+	if status == "" {
+		if nested := asObject(payload["data"]); nested != nil {
+			status = jsonString(nested, "status", "task_status")
+		}
+	}
+	return strings.ToLower(status)
+}
+
+func videoResultURL(payload map[string]any) string {
+	if url := jsonString(payload, "url", "result_url", "video_url"); url != "" {
+		return url
+	}
+	if nested := asObject(payload["data"]); nested != nil {
+		return jsonString(nested, "url", "result_url", "video_url")
+	}
+	return ""
+}
+
+func videoErrorMessage(payload map[string]any) string {
+	if msg := stringifyErrorValue(payload["error"]); msg != "" {
+		return msg
+	}
+	if nested := asObject(payload["data"]); nested != nil {
+		if msg := stringifyErrorValue(nested["error"]); msg != "" {
+			return msg
+		}
+		if msg := jsonString(nested, "fail_reason", "message"); msg != "" {
+			return msg
+		}
+	}
+	return jsonString(payload, "fail_reason", "message")
+}
+
+func outputVideoPath(out, outDir, prompt string) string {
+	if out == "" {
+		sum := sha256.Sum256([]byte(prompt))
+		out = "video-" + hex.EncodeToString(sum[:6]) + ".mp4"
+	}
+	if filepath.Dir(out) == "." {
+		out = filepath.Join(outDir, out)
+	}
+	if filepath.Ext(out) == "" {
+		out += ".mp4"
+	}
+	return out
+}
+
+func postJSON(client *http.Client, endpoint, key string, payload map[string]any, attempts int) (map[string]any, []byte, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, nil, err
+	}
+	raw, err := doRequest(client, func() (*http.Request, error) {
+		req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+		if err == nil {
+			req.Header.Set("Authorization", "Bearer "+key)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json")
+		}
+		return req, err
+	}, attempts)
+	if err != nil {
+		return nil, raw, err
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, raw, errors.New("API returned invalid JSON")
+	}
+	return parsed, raw, nil
+}
+
+func getJSON(client *http.Client, endpoint, key string, attempts int) (map[string]any, error) {
+	raw, err := doRequest(client, func() (*http.Request, error) {
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err == nil {
+			req.Header.Set("Authorization", "Bearer "+key)
+			req.Header.Set("Accept", "application/json")
+		}
+		return req, err
+	}, attempts)
+	if err != nil {
+		return nil, err
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, errors.New("API returned invalid JSON")
+	}
+	return parsed, nil
+}
+
+func downloadVideo(client *http.Client, endpoint, key, dest string) error {
+	raw, err := doRequest(client, func() (*http.Request, error) {
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err == nil {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		return req, err
+	}, 3)
+	if err != nil {
+		return err
+	}
+	if len(raw) < 32 || raw[0] == '{' || raw[0] == '[' {
+		return errors.New("video content endpoint did not return a video file")
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return fmt.Errorf("could not create output directory: %w", err)
+	}
+	if err := os.WriteFile(dest, raw, 0644); err != nil {
+		return fmt.Errorf("could not write output: %w", err)
+	}
+	return nil
+}
+
+func downloadURL(client *http.Client, source, key, dest string) error {
+	req, err := http.NewRequest(http.MethodGet, source, nil)
+	if err != nil {
+		return errors.New("invalid video URL")
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.New("could not download video URL")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("could not download video URL: HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.New("could not read downloaded video")
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return fmt.Errorf("could not create output directory: %w", err)
+	}
+	return os.WriteFile(dest, data, 0644)
+}
+
+func submitVideo(client *http.Client, root, key string, payload map[string]any, attempts int) (map[string]any, string, error) {
+	parsed, _, err := postJSON(client, root+"/videos", key, payload, attempts)
+	if err == nil {
+		return parsed, root + "/videos", nil
+	}
+	fallback, _, fallbackErr := postJSON(client, root+"/video/generations", key, payload, attempts)
+	if fallbackErr == nil {
+		return fallback, root + "/video/generations", nil
+	}
+	return nil, "", err
+}
+
+func pollVideo(client *http.Client, root, key, taskID string, timeout time.Duration) (map[string]any, error) {
+	deadline := time.Now().Add(timeout)
+	paths := []string{root + "/videos/" + taskID, root + "/video/generations/" + taskID}
+	var last map[string]any
+	for time.Now().Before(deadline) {
+		var err error
+		for _, path := range paths {
+			last, err = getJSON(client, path, key, 2)
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		switch videoStatus(last) {
+		case "completed", "success", "succeed", "succeeded":
+			return last, nil
+		case "failed", "failure", "fail":
+			if msg := videoErrorMessage(last); msg != "" {
+				return last, errors.New(msg)
+			}
+			return last, errors.New("video generation failed")
+		}
+		time.Sleep(5 * time.Second)
+	}
+	return last, errors.New("video generation timed out")
+}
+
+func generateVideo(prompt, out string, model, size string, seconds int, force, dryRun bool, timeout time.Duration, attempts int) (map[string]any, error) {
+	resolvedModel, err := resolveVideoModel(model)
+	if err != nil {
+		return nil, err
+	}
+	pixels, band, note, err := resolveVideoSize(size)
+	if err != nil {
+		return nil, err
+	}
+	if seconds < 1 {
+		seconds = defaultVideoSecs
+	}
+	dest := outputVideoPath(out, defaultVideoOutDir, prompt)
+	if err := checkOutputs([]string{dest}, force); err != nil {
+		return nil, err
+	}
+	payload := map[string]any{
+		"model":   resolvedModel,
+		"prompt":  prompt,
+		"size":    pixels,
+		"seconds": strconv.Itoa(seconds),
+	}
+	result := map[string]any{
+		"model":         resolvedModel,
+		"size":          band,
+		"resolved_size": pixels,
+		"seconds":       seconds,
+		"outputs":       []string{dest},
+	}
+	if note != "" {
+		result["note"] = note
+	}
+	if dryRun {
+		result["dry_run"] = true
+		result["payload"] = payload
+		return result, nil
+	}
+	key, err := apiKey()
+	if err != nil {
+		return nil, err
+	}
+	root := apiRoot(os.Getenv("CODEX_API_URL"))
+	client := &http.Client{Timeout: 120 * time.Second}
+	submitted, endpoint, err := submitVideo(client, root, key, payload, attempts)
+	if err != nil {
+		return nil, err
+	}
+	taskID := videoTaskID(submitted)
+	if taskID == "" {
+		return nil, errors.New("API did not return a video task id")
+	}
+	result["endpoint"] = endpoint
+	result["task_id"] = taskID
+	status, err := pollVideo(client, root, key, taskID, timeout)
+	if err != nil {
+		return result, err
+	}
+	abs, err := filepath.Abs(dest)
+	if err != nil {
+		abs = dest
+	}
+	contentURL := root + "/videos/" + taskID + "/content"
+	if err := downloadVideo(client, contentURL, key, dest); err != nil {
+		source := videoResultURL(status)
+		if source == "" {
+			return result, err
+		}
+		if err := downloadURL(client, source, key, dest); err != nil {
+			return result, err
+		}
+	}
+	result["status"] = videoStatus(status)
+	result["outputs"] = []string{abs}
+	return result, nil
+}
+
+func runVideo(argv []string) error {
+	fs := flag.NewFlagSet("video", flag.ContinueOnError)
+	var prompt, promptFile, out, model, size string
+	var seconds int
+	var force, dryRun bool
+	var timeoutSec float64
+	var attempts int
+	fs.StringVar(&prompt, "prompt", "", "prompt text")
+	fs.StringVar(&promptFile, "prompt-file", "", "UTF-8 prompt file")
+	fs.StringVar(&out, "out", "", "output path")
+	fs.StringVar(&model, "model", "", "video model; default grok-imagine-video")
+	fs.StringVar(&size, "size", defaultSize, "1K, 2K, 4K, or WIDTHxHEIGHT")
+	fs.IntVar(&seconds, "seconds", defaultVideoSecs, "clip length in seconds")
+	fs.BoolVar(&force, "force", false, "overwrite existing outputs")
+	fs.BoolVar(&dryRun, "dry-run", false, "validate without network access")
+	fs.Float64Var(&timeoutSec, "timeout", 600, "wait timeout in seconds")
+	fs.IntVar(&attempts, "max-attempts", 3, "maximum submit attempts")
+	if err := fs.Parse(argv); err != nil {
+		return err
+	}
+	finalPrompt, err := promptValue(prompt, promptFile)
+	if err != nil {
+		return err
+	}
+	result, err := generateVideo(finalPrompt, out, model, size, seconds, force, dryRun, time.Duration(timeoutSec*float64(time.Second)), attempts)
+	if err == nil {
+		printJSON(result)
+	}
+	return err
+}
+
+func runModels(argv []string) error {
+	fs := flag.NewFlagSet("models", flag.ContinueOnError)
+	var all bool
+	fs.BoolVar(&all, "all", false, "list every gateway model, not only image and video models")
+	if err := fs.Parse(argv); err != nil {
+		return err
+	}
+	out := map[string]any{
+		"defaults": map[string]any{
+			"image": currentDefaultModel(),
+			"video": currentDefaultVideoModel(),
+			"size":  defaultSize,
+		},
+		"note": "Ask which models are available, then name one. Image 2 / 2.5 / 2.6 / G2.6 map to gpt-image-{version}. Unspecified image uses gpt-image-2.5. Unspecified video uses grok-imagine-video. Unspecified size uses 1K. New gateway models do not require a skill update.",
+	}
+	key, err := apiKey()
+	if err != nil {
+		out["gateway_error"] = err.Error()
+		printJSON(out)
+		return nil
+	}
+	ep := apiRoot(os.Getenv("CODEX_API_URL")) + "/models"
+	client := &http.Client{Timeout: 30 * time.Second}
+	raw, err := doRequest(client, func() (*http.Request, error) {
+		req, err := http.NewRequest(http.MethodGet, ep, nil)
+		if err == nil {
+			req.Header.Set("Authorization", "Bearer "+key)
+			req.Header.Set("Accept", "application/json")
+		}
+		return req, err
+	}, 3)
+	if err != nil {
+		out["gateway_error"] = err.Error()
+		printJSON(out)
+		return nil
+	}
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		out["gateway_error"] = "could not parse /v1/models"
+		printJSON(out)
+		return nil
+	}
+	images, videos, others := []string{}, []string{}, []string{}
+	for _, item := range payload.Data {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		switch {
+		case isProbablyVideoModel(id):
+			videos = append(videos, id)
+		case isProbablyImageModel(id):
+			images = append(images, id)
+		case all:
+			others = append(others, id)
+		}
+	}
+	out["images"] = images
+	out["videos"] = videos
+	if all {
+		out["other"] = others
+	}
+	printJSON(out)
+	return nil
+}
+
 func usage() {
-	fmt.Fprintln(os.Stderr, "Codex Image 2.5")
-	fmt.Fprintln(os.Stderr, "Usage: codex-image2-5 <generate|generate-batch|edit> [options]")
-	fmt.Fprintln(os.Stderr, "Defaults: --model gpt-image-2.5  --size 1K  --quality auto")
-	fmt.Fprintln(os.Stderr, "GPT:   gpt-image-2  gpt-image-2.5  gpt-image-2.5-flare  gpt-image-2.5-sunburst")
-	fmt.Fprintln(os.Stderr, "Grok:  grok-imagine  grok-imagine-image-2.0  grok-imagine-image-quality")
-	fmt.Fprintln(os.Stderr, "Video models are not supported.")
-	fmt.Fprintln(os.Stderr, "GPT size: 1K=1024x1024  2K=2048x2048  4K=3840x2160 (upstream may deliver 3584x2016)")
-	fmt.Fprintln(os.Stderr, "Grok: 1K=1024  2K=2048  4K requests highest available slot (not true 4K)")
+	fmt.Fprintln(os.Stderr, "Codex Image")
+	fmt.Fprintln(os.Stderr, "Usage: codex-image2-5 <generate|generate-batch|edit|video|models> [options]")
+	fmt.Fprintln(os.Stderr, "Image default: --model gpt-image-2.5  --size 1K  --quality auto")
+	fmt.Fprintln(os.Stderr, "Video default: --model grok-imagine-video  --size 1K  --seconds 8")
+	fmt.Fprintln(os.Stderr, "Named versions: Image 2, 2.5, 2.6, G2.6, 2.7... → gpt-image-{version}")
+	fmt.Fprintln(os.Stderr, "GPT variants: 闪焰/flare  日耀/sunburst  latest/最新")
+	fmt.Fprintln(os.Stderr, "Grok image: grok-imagine  grok-imagine-image-2.0  grok-imagine-image-quality")
+	fmt.Fprintln(os.Stderr, "Video: grok-imagine-video  sora-2  or any gateway video id")
+	fmt.Fprintln(os.Stderr, "Ask models to list what the current gateway actually has.")
+	fmt.Fprintln(os.Stderr, "GPT size: 1K=1024x1024  2K=2048x2048  4K=3840x2160")
+	fmt.Fprintln(os.Stderr, "Video size: 1K=1280x720  2K=1920x1080  4K requests 1080p")
 }
 
 func main() {
@@ -970,6 +1554,10 @@ func main() {
 		err = runBatch(os.Args[2:])
 	case "edit":
 		err = runEdit(os.Args[2:])
+	case "video":
+		err = runVideo(os.Args[2:])
+	case "models":
+		err = runModels(os.Args[2:])
 	case "--help", "-h", "help":
 		usage()
 		return

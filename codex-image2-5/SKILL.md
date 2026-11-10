@@ -1,11 +1,13 @@
 ---
 name: codex-image2-5
-description: Generate or edit images through a configurable Image API. Codex Image 2.5 defaults to gpt-image-2.5 and 1K; users can say Image 2, Image 2.5, 二点五, 闪焰, 日耀, or Grok and switch 1K/2K/4K during a conversation. Preserve explicit model choices and prior settings. Image tasks only, not video.
+description: Generate or edit images and generate videos. Default image gpt-image-2.5 + 1K; default video grok-imagine-video + 1K. If the user asks which models are supported, run models and answer from the live list. Named versions such as 2.6, G2.6, 以麦 G2.6 switch immediately. 2K/4K from chat. Preserve explicit choices.
 ---
 
 # Codex Image 2.5
 
-Generate images with the bundled native CLI. Prefer this skill's executable over the built-in `image_gen` tool whenever this skill is active. No Python, Node.js, Go, or package installation is required.
+Generate images or videos with the bundled native CLI. Prefer this skill's executable over the built-in `image_gen` tool whenever this skill is active. No Python, Node.js, Go, or package installation is required.
+
+If the user asks which models are supported, what can be used, or whether 2.6 / video / a new model is available: run `models` first and answer from that live list plus the mapping rules below. Do not say this skill only supports Image 2 and 2.5.
 
 ## Select the executable
 
@@ -22,32 +24,29 @@ On macOS, run `chmod +x <executable>` if execute permission was not preserved. D
 
 Treat model, resolution (`--size`), and rendering quality (`--quality`) as separate choices. Extract them from the user's generation/editing instructions; do not send a whole sentence as `--model`.
 
-For each option, use this order: explicit choice in the current request → most recent choice in this conversation → default. Defaults for a new conversation are `gpt-image-2.5`, `1K`, and `auto`. Pass the selected values explicitly on every CLI call; the CLI itself does not remember conversation state.
+For each option, use this order: explicit choice in the current request → most recent choice in this conversation → default. New-conversation defaults: image `gpt-image-2.5`, video `grok-imagine-video`, size `1K`, quality `auto`. Pass the selected values explicitly on every CLI call; the CLI itself does not remember conversation state.
 
-The skill's name, `$codex-image2-5` or "Codex Image 2.5", is an invocation, not a request to reset the model. If the user says "使用 Codex Image 2.5，用 Image 2", use `gpt-image-2`. Do not select models from quoted image text, the image subject, an aspect ratio, image numbers, or a resolution such as 2K.
+The skill's name, `$codex-image2-5` or "Codex Image 2.5", is an invocation, not a request to reset the model. If the user says "使用 Codex Image 2.5，用 Image 2", use `gpt-image-2`. If they say "用 2.6" / "G2.6" / "以麦 G2.6", use `gpt-image-2.6` immediately; do not ask them to confirm the id. Do not select models from quoted image text, the image subject, an aspect ratio, image numbers, or a resolution such as 2K.
 
 Users switch in chat; do not ask them to edit files, environment variables or restart the client for model/resolution changes. Initial API URL/key setup is separate.
 
 ### Model names in ordinary language
 
-Recognize case differences, spaces, hyphens, underscores, full-width letters/digits and these short names:
+Do not require a skill update when a new GPT Image version appears. Map spoken names with these rules, including versions not listed here:
 
-| User says | Model |
-| --- | --- |
-| GPT / GPT Image (no version) | `gpt-image-2.5` |
-| Image 2 / image2 / GPT Image 2 / img2 / Image 二 | `gpt-image-2` |
-| Image 2.5 / image2.5 / 2.5 / 二点五 | `gpt-image-2.5` |
-| 闪焰 / 闪焰版 / flare / Image 2.5 flare | `gpt-image-2.5-flare` |
-| 日耀 / 日耀版 / sunburst / Image 2.5 sunburst | `gpt-image-2.5-sunburst` |
-| Grok / Grok 2 / Grok 2.0 | `grok-imagine-image-2.0` |
-| Grok 高质量 / Grok 质量版 / Grok quality | `grok-imagine-image-quality` |
-| grok-imagine / Grok Imagine (explicit name) | `grok-imagine` |
+- No version / GPT / GPT Image → `gpt-image-2.5` (cheaper default)
+- `Image {version}` / `{version}` / `G{version}` / `gpt-image-{version}` / 以麦 / Chinese forms such as 二点五、二点六 → `gpt-image-{version}`. `Image 2` and `2.0` are `gpt-image-2`. `2.6`, `G2.6`, `以麦 G2.6` are `gpt-image-2.6`. `2.7` is `gpt-image-2.7`. Later versions follow the same rule.
+- 闪焰 / flare → append `-flare`. 日耀 / sunburst → append `-sunburst`. If no version is named, use the default family (`gpt-image-2.5-flare` or `gpt-image-2.5-sunburst`).
+- 最新 / latest (image) → `chatgpt-image-latest`
+- Grok / Grok 2 / Grok 2.0 → `grok-imagine-image-2.0`. Grok 高质量 → `grok-imagine-image-quality`. Explicit `grok-imagine` stays `grok-imagine`.
+- 生成视频 / 做个视频 / 视频 (no model named) → `grok-imagine-video`. Grok 视频 → `grok-imagine-video`. Grok 视频 1.5 → `grok-imagine-video-1.5`. sora / sora 2 → `sora-2`. Other video ids pass through.
+- Any other explicit gateway model id → pass through unchanged to `--model`. If the user asks what is supported, or you are unsure, run `models` (not a paid generation).
 
-"用 Image 2" means Image 2, even though the skill is named Image 2.5. "用二点五" and "换成2.5模型" mean Image 2.5. Prefer the more specific variant when named: "Image 2.5 闪焰" is flare.
+Recognize case differences, spaces, hyphens, underscores, full-width letters/digits, Chinese digits, and speech-to-text such as 「以麦 G2.6」. Prefer the more specific variant when named: "2.6 闪焰" is `gpt-image-2.6-flare`.
+
+The skill's name does not pin the model. "用 Image 2" is Image 2. "用 2.6" is Image 2.6. Do not refuse a named version because this file has no table row for it, and do not ask the user to type the gateway id after they already named the version.
 
 "高质量一点" or "高清一点" alone preserves the current model and resolution; use `--quality high` where supported. Never turn that phrase alone into the Grok quality model or silently choose 4K. Only explicit "Grok 高质量" selects that model. If a requested model name has genuinely conflicting interpretations, ask one short clarification before a paid call.
-
-Unknown explicit gateway model IDs may pass through unchanged. Video IDs, including Grok video, are unsupported.
 
 ### Resolution and conversation continuity
 
@@ -60,9 +59,9 @@ Map "1K/1k/1 K/一K" to `1K`, "2K/2k/2 K/两K/二K" to `2K`, and "4K/4k/4 K/四K
 - "恢复默认模型": use Image 2.5, preserve resolution.
 - "全部恢复默认": use Image 2.5 + 1K + auto.
 
-Example sequence: "用Image 2，2K画海边" → Image 2 + 2K; "改4K" → Image 2 + 4K; "换二点五" → Image 2.5 + 4K; "用Grok，2K" → Grok + 2K.
+Example sequence: "用Image 2，2K画海边" → Image 2 + 2K; "改4K" → Image 2 + 4K; "换二点五" → Image 2.5 + 4K; "换成2.6" → Image 2.6 + 4K; "用Grok，2K" → Grok + 2K.
 
-GPT request sizes: 1K → 1024×1024, 2K → 2048×2048, 4K → 3840×2160. These are requested pixels, not a guarantee of the upstream result.
+GPT request sizes: 1K → 1024×1024, 2K → 2048×2048, 4K → 3840×2160. Video sizes: 1K → 1280×720, 2K → 1920×1080, 4K requests 1080p. These are requested pixels, not a guarantee of the upstream result. If the user does not name a resolution, use 1K.
 
 Grok's current adapter uses 1k/2k resolution plus size. Its 4K option requests the upstream's highest slot; it is not guaranteed native 4K and may produce about 2816×1584. Inspect `actual_size` for every image. Report any `warning` verbatim; do not call a lower-resolution image 4K.
 
@@ -70,11 +69,11 @@ Grok's current adapter uses 1k/2k resolution plus size. Its 4K option requests t
 
 ## Workflow
 
-1. Decide whether the request is a new image, an edit, or multiple distinct assets/variants.
+1. Decide whether the request is a new image, an edit, a video, a model list, or multiple distinct assets/variants.
 2. Collect the prompt, intended use, exact text, visual constraints, and avoid items.
 3. From this conversation, set `--model` and `--size`. Do not send the user to a config file.
 4. Shape the prompt only as much as needed. Preserve detailed prompts; tastefully clarify generic prompts without inventing brands, people, slogans, or unrelated objects.
-5. Run the selected executable with `generate` for one prompt, `edit` for changes to existing images, or `generate-batch` for JSONL jobs.
+5. Run the selected executable with `generate` for one image, `edit` for changes to existing images, `video` for a clip, `generate-batch` for JSONL image jobs, or `models` when the user asks what is supported.
 6. Inspect each output for subject, composition, text accuracy, constraints, and visible artifacts.
 7. If revision is needed, change one targeted aspect per iteration and re-check.
 8. Report absolute output paths, the final prompt or prompt set, requested size, actual pixels (`actual_size`), quality, and model. If the JSON has `warning`, quote it to the user verbatim. A 200 response can still be the wrong resolution.
@@ -122,6 +121,35 @@ When the user chooses Grok:
   --out "output/imagegen/nebula-grok.png"
 ```
 
+When the user chooses Image 2.6 or a later version, pass that version. Do not wait for this file to list it:
+
+```powershell
+& "<skill-dir>\bin\codex-image2-5-windows-amd64.exe" generate `
+  --prompt "A small blue nebula in a glass bottle, studio product photo" `
+  --model gpt-image-2.6 `
+  --size 1K `
+  --quality auto `
+  --out "output/imagegen/nebula-26.png"
+```
+
+When the user asks which models are supported:
+
+```powershell
+& "<skill-dir>\bin\codex-image2-5-windows-amd64.exe" models
+```
+
+Answer with the live `images` / `videos` lists. Named versions still work even if a row is missing from this file.
+
+When the user wants a video and does not name a model, use `grok-imagine-video`. If they do not name a resolution, use `1K`:
+
+```powershell
+& "<skill-dir>\bin\codex-image2-5-windows-amd64.exe" video `
+  --prompt "A red balloon drifting over a calm lake at sunset" `
+  --model grok-imagine-video `
+  --size 1K `
+  --out "output/videogen/balloon.mp4"
+```
+
 Use `--prompt-file` for long prompts. Use `--n` only for variants of the same prompt. Distinct assets belong in separate calls or a batch.
 
 ## Edit an image
@@ -156,7 +184,7 @@ Read [references/batch-format.md](references/batch-format.md) before preparing a
 - Read the API base from `CODEX_API_URL`; default to `https://apinebula.com`.
 - Require `CODEX_API_KEY`. Never place it in a command, file, prompt, log, or response.
 - If the key is absent, tell the user to set it locally and confirm when ready. Never ask them to paste it into chat.
-- Default to model `gpt-image-2.5` and size `1K` when this conversation has not selected them. Switch with `--model` / `--size 1K|2K|4K` from the user's chat this turn. Never ask them to restart Codex or edit text config to change model or 画质.
+- Default image model `gpt-image-2.5` and size `1K` when this conversation has not selected them. Default video model `grok-imagine-video` and size `1K`. Named versions such as 2.6 / G2.6 go to `--model gpt-image-2.6`. Unknown gateway ids pass through. Never ask them to restart Codex or edit text config to change model or 画质. Optional `CODEX_IMAGE_DEFAULT_MODEL` / `CODEX_VIDEO_DEFAULT_MODEL` override compiled defaults.
 - `--quality` defaults to `auto` (`low`, `medium`, `high`, or `auto`).
 - Use `--dry-run` to validate a request without network access or requiring a key.
 - Save project-bound assets inside the current project. The CLI default is `output/imagegen/`.

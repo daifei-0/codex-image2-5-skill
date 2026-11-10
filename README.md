@@ -1,14 +1,14 @@
 # Codex Image 2.5 Skill（鹊桥赞助支持）
 
-让 Codex 通过你配置的 OpenAI 兼容 API 生成和编辑图片。默认 **GPT Image 2.5（`gpt-image-2.5`）+ 1K**，也支持 Image 2、闪焰、日耀和 Grok 生图模型。
+让 Codex 通过你配置的 OpenAI 兼容 API 生成、编辑图片，也可以生成视频。生图默认 **GPT Image 2.5（`gpt-image-2.5`）+ 1K**（成本更低）；视频默认 **`grok-imagine-video` + 1K**。用户可以问「现在支持哪些模型」，也可以直接说「用 2.6」「G2.6」「这张 4K」「生成视频」，不必为每个新模型再更新 Skill。
 
-日常直接说「用 Image 2」「换 2.5」「这张用 4K」即可。同一对话保留已经选择的模型和分辨率，换模型、换画质都不用改配置或重启。
+日常直接说「用 Image 2」「换成 2.6」「用 Grok」「做个视频」即可。同一对话保留已经选择的模型和分辨率，换模型、换画质都不用改配置或重启。
 
 - 仓库：**codex-image2-5-skill**
 - 显示名称：**Codex Image 2.5**
 - 技能名称及安装目录：**codex-image2-5**
 - 调用方式：`$codex-image2-5`
-- 支持文生图、单图/多图编辑、PNG Mask、JSONL 批量生图；不支持视频。
+- 支持文生图、单图/多图编辑、PNG Mask、JSONL 批量生图、文生视频；可查询当前网关有哪些模型。
 - 内置 Windows x64/ARM64、macOS Intel/Apple Silicon 程序，无需安装 Python、Node.js 或 Go。
 
 ## 安装或升级
@@ -23,7 +23,7 @@ https://github.com/daifei-0/codex-image2-5-skill
 保留已有 CODEX_API_URL 和 CODEX_API_KEY，不要打印密钥。
 ```
 
-旧版技能名称是 `codex-image2`。仅改 GitHub 仓库名不会更新已经安装的文件，需更新技能后使用 `$codex-image2-5`。已有 API 地址和密钥可继续使用；新默认模型要求令牌有 `gpt-image-2.5` 调用权限，模型价格以所用平台为准。
+旧版技能名称是 `codex-image2`。仅改 GitHub 仓库名不会更新已经安装的文件，需更新技能后使用 `$codex-image2-5`。已有 API 地址和密钥可继续使用；默认模型要求令牌有 `gpt-image-2.5` 权限，改用 2.6 或其他模型时令牌也要有对应权限，价格以所用平台为准。
 
 手动安装（首次安装）：
 
@@ -57,22 +57,31 @@ Windows 可在系统「编辑账户的环境变量」中设置以上两项。mac
 
 ## 白话文切换模型
 
-明确指定的模型优先；没指定的选项沿用本对话已有选择。新对话没有选择时才使用 Image 2.5 + 1K。
+明确指定的模型优先；没指定的选项沿用本对话已有选择。新对话生图默认 Image 2.5 + 1K，视频默认 `grok-imagine-video` + 1K。
+
+问「支持哪些模型 / 现在能用什么」时，程序会向网关拉取当前模型列表，再按你的说法自动对应，不必再指定一次完整 id。
 
 | 你说 | 实际模型 |
 | --- | --- |
-| 新对话不指定模型 / GPT / GPT Image | `gpt-image-2.5` |
+| 新对话不指定模型 / GPT / GPT Image | `gpt-image-2.5`（默认，更便宜） |
 | Image 2 / image2 / GPT Image 2 / img2 / Image 二 | `gpt-image-2` |
-| Image 2.5 / image2.5 / 2.5 / 二点五 | `gpt-image-2.5` |
-| 闪焰 / 闪焰版 / flare / Image 2.5 flare | `gpt-image-2.5-flare` |
-| 日耀 / 日耀版 / sunburst / Image 2.5 sunburst | `gpt-image-2.5-sunburst` |
+| Image 2.5 / 2.5 / 二点五 | `gpt-image-2.5` |
+| Image 2.6 / 2.6 / G2.6 / 以麦 G2.6 / 二点六 | `gpt-image-2.6` |
+| Image 2.7 / 2.7 / 以后的版本号 | `gpt-image-2.7` 等，按你说的版本生成，不必等 Skill 更新 |
+| 闪焰 / flare（未点版本） | `gpt-image-2.5-flare` |
+| 2.6 闪焰 / Image 2.6 flare | `gpt-image-2.6-flare` |
+| 日耀 / sunburst（未点版本） | `gpt-image-2.5-sunburst` |
+| 最新 / latest | `chatgpt-image-latest` |
 | Grok / Grok 2 / Grok 2.0 | `grok-imagine-image-2.0` |
 | Grok 高质量 / Grok 质量版 / Grok quality | `grok-imagine-image-quality` |
 | 点名 grok-imagine / Grok Imagine | `grok-imagine` |
+| 生成视频 / 做个视频（未点模型） | `grok-imagine-video` |
+| Grok 视频 / Grok video 1.5 / sora | `grok-imagine-video` / `grok-imagine-video-1.5` / `sora-2` |
+| 网关上的完整模型名 | 原样传给 API |
 
-模型别名不区分英文字母大小写，支持常见空格、连字符、下划线及全角字母数字。CLI 的 `--model` 接收模型名或别名，完整聊天句子由 Codex 提取模型与分辨率。
+模型别名不区分英文字母大小写，支持常见空格、连字符、下划线、全角字母数字和中文数字。CLI 的 `--model` 接收版本号、别名或网关 id；完整聊天句子由 Codex 提取模型与分辨率。说「2K」「4K」即可换分辨率，未指定时一律 1K。
 
-**Image 2 与 Image 2.5 是不同模型。** 技能名称里的「2.5」不覆盖你明确选择的 Image 2。只说「高质量一点」保留当前模型，提高其质量参数，不会自动跳到 Grok。画面文字、尺寸中的数字也不会被当成模型名。
+**技能名称里的「2.5」只表示生图默认，不锁死模型。** 「用 Image 2」是 Image 2，「用 2.6」是 Image 2.6。只说「高质量一点」保留当前模型，提高其质量参数，不会自动跳到 Grok。画面文字、尺寸中的数字也不会被当成模型名。可用 `CODEX_IMAGE_DEFAULT_MODEL` / `CODEX_VIDEO_DEFAULT_MODEL` 改默认，不必改 Skill 文件。
 
 连续对话示例：
 
@@ -80,21 +89,22 @@ Windows 可在系统「编辑账户的环境变量」中设置以上两项。mac
 使用 $codex-image2-5，用 Image 2，2K，画一张海边日出。
 这张改成 4K，模型不变。
 换 Image 2.5 再画一张，分辨率不变。
+换成 2.6。
 改用 Grok，2K。
 还是这个模型，画一张雪山。
 ```
 
-以上分别使用 Image 2 + 2K、Image 2 + 4K、Image 2.5 + 4K、Grok + 2K、Grok + 2K。
+以上分别使用 Image 2 + 2K、Image 2 + 4K、Image 2.5 + 4K、Image 2.6 + 4K、Grok + 2K、Grok + 2K。
 
 ## 1K / 2K / 4K
 
 「2K」「2k」「2 K」「两K」「二K」都表示 2K。「一K」「四K」同理。只改分辨率时保留模型，只改模型时保留分辨率。「高清一点」没有指定像素档位，不擅自切换为收费可能更高的 4K。
 
-| 选择 | GPT 请求尺寸 | Grok 当前适配 |
-| --- | --- | --- |
-| 1K | 1024×1024 | 1k + 1024×1024 |
-| 2K | 2048×2048 | 2k + 2048×2048 |
-| 4K | 3840×2160 | 请求上游最高档，不能保证原生 4K |
+| 选择 | GPT 生图 | Grok 生图 | 视频 |
+| --- | --- | --- | --- |
+| 1K（未指定时的默认） | 1024×1024 | 1k + 1024×1024 | 1280×720 |
+| 2K | 2048×2048 | 2k + 2048×2048 | 1920×1080 |
+| 4K | 3840×2160 | 请求上游最高档，不能保证原生 4K | 按 1080p 请求 |
 
 以上是请求参数，最终像素以输出 `actual_size` 为准。部分上游可能降档或返回其他尺寸；程序会检查可识别图片的实际尺寸并对降档发出警告。Grok 当前4K适配仍发2k分辨率参数和较大size，历史上可返回约2816×1584，不能称为原生4K；GPT也不能仅凭请求参数保证3840×2160。
 
@@ -135,9 +145,24 @@ Windows 可在系统「编辑账户的环境变量」中设置以上两项。mac
 ```powershell
 & "codex-image2-5/bin/codex-image2-5-windows-amd64.exe" generate `
   --prompt "A seaside sunrise" `
-  --model "Image 2" `
+  --model "Image 2.6" `
   --size "两K" `
   --dry-run
+```
+
+列出当前网关的生图和视频模型（新模型不必改 Skill）：
+
+```powershell
+& "codex-image2-5/bin/codex-image2-5-windows-amd64.exe" models
+```
+
+生成视频（未指定模型时用 `grok-imagine-video`，未指定分辨率时用 1K）：
+
+```powershell
+& "codex-image2-5/bin/codex-image2-5-windows-amd64.exe" video `
+  --prompt "A red balloon drifting over a calm lake at sunset" `
+  --size 1K `
+  --out "output/videogen/balloon.mp4"
 ```
 
 编辑：
@@ -177,9 +202,9 @@ go build -trimpath -ldflags "-s -w" -o codex-image2-5/bin/codex-image2-5-windows
 - **没有 API Key**：确认本机环境变量以及客户端进程是否已读取配置。
 - **524 / 超时 / 429**：程序已有有限次数重试；仍失败时可减少批量并发、选1K或稍后再试，不会无限重试。
 - **图片没有达到请求分辨率**：查看 `actual_size` 和 `warning`，按实际像素判断，不把请求档位当成生成结果。
-- **视频**：此技能仅处理图片，拒绝视频模型。
+- **视频**：说「生成视频」即可；未指定模型用 `grok-imagine-video`，未指定分辨率用 1K。点名 sora 或其他网关视频模型时按你说的调用。
 - **其他中转站**：需兼容 `POST /v1/images/generations`、`POST /v1/images/edits`，并提供所选模型。
 
 ## 关于本仓库与许可
 
-本项目作者为 [daifei-0](https://github.com/daifei-0)，由鹊桥赞助支持，采用 [MIT 许可证](LICENSE)。本版本支持多模型与分辨率适配、对话切换和别名识别。
+本项目作者为 [daifei-0](https://github.com/daifei-0)，由鹊桥赞助支持，采用 [MIT 许可证](LICENSE)。本版本支持查询当前网关模型、对话点名切换、1K/2K/4K，以及后续 GPT Image / 视频模型的规则适配。
