@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Image 2.5"
+  short_description: "Image 2.5 by default; also 2.6, later models, and video"
+  default_prompt: "Use $codex-image2-5. Default is Image 2.5 and 1K. If I name 2.6, a later model, Grok, or video, follow that. If I ask which models are supported, list the live gateway models."

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Codex Image 2.6"
-  short_description: "Generate and edit with Image 2.6; switch 1K/2K/4K or video"
-  default_prompt: "Use $codex-image2-6 to generate or edit an image, or make a video. Default is Image 2.6 and 1K. Follow my model and resolution if I name them."

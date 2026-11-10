@@ -4,9 +4,9 @@ import "testing"
 
 func TestResolveGPTImageVersions(t *testing.T) {
 	cases := map[string]string{
-		"":                      "gpt-image-2.6",
-		"GPT":                   "gpt-image-2.6",
-		"GPT Image":             "gpt-image-2.6",
+		"":                      "gpt-image-2.5",
+		"GPT":                   "gpt-image-2.5",
+		"GPT Image":             "gpt-image-2.5",
 		"2":                     "gpt-image-2",
 		"Image 2":               "gpt-image-2",
 		"image2":                "gpt-image-2",
@@ -29,10 +29,10 @@ func TestResolveGPTImageVersions(t *testing.T) {
 		"gpt-image-2.7-flare":   "gpt-image-2.7-flare",
 		"2.8":                   "gpt-image-2.8",
 		"Image 3":               "gpt-image-3",
-		"闪焰":                    "gpt-image-2.6-flare",
+		"闪焰":                    "gpt-image-2.5-flare",
 		"Image 2.6 闪焰":          "gpt-image-2.6-flare",
 		"2.6 flare":             "gpt-image-2.6-flare",
-		"日耀":                    "gpt-image-2.6-sunburst",
+		"日耀":                    "gpt-image-2.5-sunburst",
 		"Image 2.6 sunburst":    "gpt-image-2.6-sunburst",
 		"最新":                    "chatgpt-image-latest",
 		"latest":                "chatgpt-image-latest",
